@@ -49,6 +49,9 @@ function remote {
 }
 
 function clone_or_update {
+    if [ "${NOUPDATE-}" = true ]; then
+      return
+    fi
     branch=${3:-master}
     if [ ! -e "$2" ]; then
         echo ">>> clone $1/$2 $COLOR_RED($branch)$COLOR_RESET"
@@ -100,15 +103,15 @@ if [ "${LLVM-}" == true ]; then
         fi
     fi
     cd llvm-project
-    if ! patch --dry-run --reverse --force -s -p1 -i ../amdgpu_icmp_fold.patch; then
-        patch -p1 -i ../amdgpu_icmp_fold.patch
-        patch -p1 -i ../nvptx_feature_ptx60.patch
+    if ! patch --dry-run --reverse --force -s -p1 -i ../patches/nvptx_feature_ptx60.patch; then
+    #    patch -p1 -i ../patches/amdgpu_icmp_fold.patch
+        patch -p1 -i ../patches/nvptx_feature_ptx60.patch
     fi
 
     # rv
     cd "${CUR}"
     cd llvm-project
-    clone_or_update cdl-saarland rv ${BRANCH_RV}
+    clone_or_update m-kurtenacker rv ${BRANCH_RV}
     cd rv
     git submodule update --init
     cd "${CUR}"
@@ -120,9 +123,9 @@ if [ "${LLVM-}" == true ]; then
         DEFAULT_SYSROOT=`xcrun --sdk macosx --show-sdk-path`
     fi
     cmake ../llvm-project/llvm ${CMAKE_MAKE} -DLLVM_BUILD_LLVM_DYLIB:BOOL=ON -DLLVM_LINK_LLVM_DYLIB:BOOL=ON -DCMAKE_BUILD_TYPE:STRING=${BUILD_TYPE} -DCMAKE_INSTALL_PREFIX:PATH="${CUR}/llvm_install" \
-        -DLLVM_EXTERNAL_PROJECTS="rv" -DLLVM_EXTERNAL_RV_SOURCE_DIR=${CUR}/llvm-project/rv \
-        -DLLVM_ENABLE_RTTI:BOOL=ON -DLLVM_ENABLE_PROJECTS="clang;lld" -DLLVM_INCLUDE_TESTS:BOOL=ON -DLLVM_TARGETS_TO_BUILD:STRING="${LLVM_TARGETS}" -DDEFAULT_SYSROOT:PATH="${DEFAULT_SYSROOT}"
-    ${MAKE} install
+        -DLLVM_EXTERNAL_PROJECTS="rv" -DLLVM_EXTERNAL_RV_SOURCE_DIR=${CUR}/llvm-project/rv -DRV_DEBUG:BOOL=OFF \
+        -DLLVM_ENABLE_RTTI:BOOL=ON -DLLVM_ENABLE_PROJECTS="clang;lld" -DLLVM_INCLUDE_TESTS:BOOL=ON -DLLVM_TARGETS_TO_BUILD:STRING="${LLVM_TARGETS}" -DDEFAULT_SYSROOT:PATH="${DEFAULT_SYSROOT}" -G Ninja
+    ${NINJA} install
     cd "${CUR}"
 
     LLVM_VARS=-DLLVM_DIR:PATH="${CUR}/llvm_install/lib/cmake/llvm"
@@ -136,7 +139,7 @@ fi
 
 # source this file to put clang and impala in path
 cat > "${CUR}/project.sh" <<_EOF_
-export PATH="${CUR}/llvm_install/bin:${CUR}/impala/build/bin:\${PATH:-}"
+export PATH="${CUR}/llvm_install/bin:${CUR}/impala/build/bin:${CUR}/artic/build/bin:\${PATH:-}"
 export LD_LIBRARY_PATH="${CUR}/llvm_install/lib:\${LD_LIBRARY_PATH:-}"
 _EOF_
 if [ "${CMAKE-}" == true ]; then
@@ -148,38 +151,57 @@ source "${CUR}/project.sh"
 # thorin
 cd "${CUR}"
 clone_or_update AnyDSL thorin ${BRANCH_THORIN}
+cd "${CUR}/thorin"
+if ! patch --dry-run --reverse --force -s -p1 -i ../patches/thorin_llvm_master.patch; then
+  patch -p1 -i ../patches/thorin_llvm_master.patch
+fi
 cd "${CUR}/thorin/build"
-cmake .. ${CMAKE_MAKE} -DCMAKE_BUILD_TYPE:STRING=${BUILD_TYPE} ${LLVM_VARS} -DTHORIN_PROFILE:BOOL=${THORIN_PROFILE} -DHalf_DIR:PATH="${CUR}/half/include"
-${MAKE}
+cmake .. ${CMAKE_MAKE} -DCMAKE_BUILD_TYPE:STRING=${BUILD_TYPE} ${LLVM_VARS} -DTHORIN_PROFILE:BOOL=${THORIN_PROFILE} -DHalf_DIR:PATH="${CUR}/half/include" -G Ninja
+${NINJA}
 
 # impala
+#cd "${CUR}"
+#clone_or_update AnyDSL impala ${BRANCH_IMPALA}
+#cd "${CUR}/impala"
+#if ! patch --dry-run --reverse --force -s -p1 -i ../patches/impala_llvm_master.patch; then
+#  patch -p1 -i ../patches/impala_llvm_master.patch
+#fi
+#cd "${CUR}/impala/build"
+#cmake .. ${CMAKE_MAKE} -DCMAKE_BUILD_TYPE:STRING=${BUILD_TYPE} -DThorin_DIR:PATH="${CUR}/thorin/build/share/anydsl/cmake" -G Ninja
+#${NINJA}
+
+# artic
 cd "${CUR}"
-clone_or_update AnyDSL impala ${BRANCH_IMPALA}
-cd "${CUR}/impala/build"
-cmake .. ${CMAKE_MAKE} -DCMAKE_BUILD_TYPE:STRING=${BUILD_TYPE} -DThorin_DIR:PATH="${CUR}/thorin/build/share/anydsl/cmake"
-${MAKE}
+clone_or_update AnyDSL artic ${BRANCH_ARTIC}
+cd "${CUR}/artic/build"
+cmake .. ${CMAKE_MAKE} -DCMAKE_BUILD_TYPE:STRING=${BUILD_TYPE} -DThorin_DIR:PATH="${CUR}/thorin/build/share/anydsl/cmake" -G Ninja
+${NINJA}
 
 # runtime
 cd "${CUR}"
 clone_or_update AnyDSL runtime ${BRANCH_RUNTIME}
+cd "${CUR}/runtime"
+if ! patch --dry-run --reverse --force -s -p1 -i ../patches/runtime_final_segfault.patch; then
+  patch -p1 -i ../patches/runtime_final_segfault.patch
+fi
 cd "${CUR}/runtime/build"
-cmake .. ${CMAKE_MAKE} -DCMAKE_BUILD_TYPE:STRING=${BUILD_TYPE} -DRUNTIME_JIT:BOOL=${RUNTIME_JIT} -DImpala_DIR:PATH="${CUR}/impala/build/share/anydsl/cmake"
-${MAKE}
+cmake .. ${CMAKE_MAKE} -DCMAKE_BUILD_TYPE:STRING=${BUILD_TYPE} -DRUNTIME_JIT:BOOL=${RUNTIME_JIT} -DImpala_DIR:PATH="${CUR}/artic/build/share/anydsl/cmake" -G Ninja
+${NINJA}
 
 # configure stincilla but don't build yet
 cd "${CUR}"
 clone_or_update AnyDSL stincilla ${BRANCH_STINCILLA}
 cd "${CUR}/stincilla/build"
-cmake .. ${CMAKE_MAKE} -DCMAKE_BUILD_TYPE:STRING=${BUILD_TYPE} -DAnyDSL_runtime_DIR:PATH="${CUR}/runtime/build/share/anydsl/cmake" -DBACKEND:STRING="cpu"
-#${MAKE}
+cmake .. ${CMAKE_MAKE} -DCMAKE_BUILD_TYPE:STRING=${BUILD_TYPE} -DAnyDSL_runtime_DIR:PATH="${CUR}/runtime/build/share/anydsl/cmake" -DBACKEND:STRING="cpu" -G Ninja
+${NINJA}
 
 # configure rodent but don't build yet
 if [ "$CLONE_RODENT" = true ]; then
     cd "${CUR}"
     clone_or_update AnyDSL rodent ${BRANCH_RODENT}
     cd "${CUR}/rodent/build"
-    cmake .. ${CMAKE_MAKE} -DCMAKE_BUILD_TYPE:STRING=${BUILD_TYPE} -DAnyDSL_runtime_DIR:PATH="${CUR}/runtime/build/share/anydsl/cmake"
-    #${MAKE}
+    cmake .. ${CMAKE_MAKE} -DCMAKE_BUILD_TYPE:STRING=${BUILD_TYPE} -DAnyDSL_runtime_DIR:PATH="${CUR}/runtime/build/share/anydsl/cmake" -DTARGET_PLATFORM:STRING=${RODENT_PLATFORM-} -G Ninja
+    ${NINJA}
 fi
 
 cd "${CUR}"

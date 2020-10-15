@@ -1,0 +1,13 @@
+diff --git a/src/intrinsicgen/main.cpp b/src/intrinsicgen/main.cpp
+index 13c7bb72..b51e7710 100644
+--- a/src/intrinsicgen/main.cpp
++++ b/src/intrinsicgen/main.cpp
+@@ -35,7 +35,7 @@ int main() {
+         if (llvm::Intrinsic::isOverloaded(id))
+             llvm_name = IntrinsicNameTable[i];
+         else
+-            llvm_name = llvm::Intrinsic::getName(id);
++            llvm_name = llvm::Intrinsic::getName(id).str();
+ 
+         // skip "experimental" intrinsics
+         if (llvm_name.find("experimental")!=std::string::npos)

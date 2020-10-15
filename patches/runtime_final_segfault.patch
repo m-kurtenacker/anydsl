@@ -1,0 +1,296 @@
+diff --git a/src/runtime.cpp b/src/runtime.cpp
+index dc46833..bd79bda 100644
+--- a/src/runtime.cpp
++++ b/src/runtime.cpp
+@@ -65,26 +65,65 @@ template<> template<typename... Args>
+ Platform* PlatformFactory<HSAPlatform>::create(Runtime* runtime, const std::string& reference, Args... args);
+ #endif
+ 
+-Runtime& runtime() {
++ProfileLevel * Runtime::profile_;
++std::vector<Platform*> * Runtime::platforms_;
++std::unordered_map<std::string, std::string> * Runtime::files_;
++std::atomic_int * Runtime::life_count;
++std::atomic_int * Runtime::alloc_count;
++
++Runtime runtime() {
+     static std::unique_ptr<Runtime> runtime(new Runtime());
++    if (!runtime)
++        return Runtime();
+     return *runtime;
+ }
+ 
+ Runtime::Runtime() {
+-    profile_ = ProfileLevel::None;
+-    const char* env_var = std::getenv("ANYDSL_PROFILE");
+-    if (env_var) {
+-        std::string env_str = env_var;
+-        for (auto& c: env_str)
+-            c = std::toupper(c, std::locale());
+-        if (env_str == "FULL")
+-            profile_ = ProfileLevel::Full;
++    if (!life_count) {
++        life_count = new std::atomic_int(1);
++        alloc_count = new std::atomic_int(0);
++
++        profile_ = new ProfileLevel(ProfileLevel::None);
++        platforms_ = new std::vector<Platform*>();
++        files_ = new std::unordered_map<std::string, std::string>();
++
++        const char* env_var = std::getenv("ANYDSL_PROFILE");
++        if (env_var) {
++            std::string env_str = env_var;
++            for (auto& c: env_str)
++                c = std::toupper(c, std::locale());
++            if (env_str == "FULL")
++                *profile_ = ProfileLevel::Full;
++        }
++
++        register_platform<CpuPlatform>("CPU");
++        register_platform<CudaPlatform>("CUDA");
++        register_platform<OpenCLPlatform>("OpenCL");
++        register_platform<HSAPlatform>("HSA");
++    } else {
++        (*life_count)++;
++    }
++}
++
++Runtime::Runtime(const Runtime &) {
++    (*life_count)++;
++}
++
++Runtime::~Runtime() {
++    if (--(*life_count))
++        return;
++    if (*alloc_count)
++        return;
++
++    for (auto p: *platforms_) {
++        delete p;
+     }
+ 
+-    register_platform<CpuPlatform>("CPU");
+-    register_platform<CudaPlatform>("CUDA");
+-    register_platform<OpenCLPlatform>("OpenCL");
+-    register_platform<HSAPlatform>("HSA");
++    delete (life_count);
++    delete (alloc_count);
++    delete (profile_);
++    delete (platforms_);
++    delete (files_);
+ }
+ 
+ #ifdef _WIN32
+@@ -166,8 +205,8 @@ std::string get_cached_filename(const std::string& str, const std::string& ext)
+ }
+ 
+ std::string Runtime::load_file(const std::string& filename) const {
+-    auto file_it = files_.find(filename);
+-    if (file_it != files_.end())
++    auto file_it = files_->find(filename);
++    if (file_it != files_->end())
+         return file_it->second;
+ 
+     std::ifstream src_file(filename);
+@@ -214,14 +253,20 @@ void anydsl_info(void) {
+ }
+ 
+ void* anydsl_alloc(int32_t mask, int64_t size) {
+-    return runtime().alloc(to_platform(mask), to_device(mask), size);
++    Runtime rt = runtime();
++    (*rt.alloc_count)++;
++    return rt.alloc(to_platform(mask), to_device(mask), size);
+ }
+ 
+ void* anydsl_alloc_host(int32_t mask, int64_t size) {
+-    return runtime().alloc_host(to_platform(mask), to_device(mask), size);
++    Runtime rt = runtime();
++    (*rt.alloc_count)++;
++    return rt.alloc_host(to_platform(mask), to_device(mask), size);
+ }
+ 
+ void* anydsl_alloc_unified(int32_t mask, int64_t size) {
++    Runtime rt = runtime();
++    (*rt.alloc_count)++;
+     return runtime().alloc_unified(to_platform(mask), to_device(mask), size);
+ }
+ 
+@@ -230,11 +275,15 @@ void* anydsl_get_device_ptr(int32_t mask, void* ptr) {
+ }
+ 
+ void anydsl_release(int32_t mask, void* ptr) {
+-    runtime().release(to_platform(mask), to_device(mask), ptr);
++    Runtime rt = runtime();
++    (*rt.alloc_count)--;
++    rt.release(to_platform(mask), to_device(mask), ptr);
+ }
+ 
+ void anydsl_release_host(int32_t mask, void* ptr) {
+-    runtime().release_host(to_platform(mask), to_device(mask), ptr);
++    Runtime rt = runtime();
++    (*rt.alloc_count)--;
++    rt.release_host(to_platform(mask), to_device(mask), ptr);
+ }
+ 
+ void anydsl_copy(int32_t mask_src, const void* src, int64_t offset_src,
+diff --git a/src/runtime.h b/src/runtime.h
+index 64a3ca7..4ec05a1 100644
+--- a/src/runtime.h
++++ b/src/runtime.h
+@@ -3,6 +3,7 @@
+ 
+ #include "platform.h"
+ 
++#include <atomic>
+ #include <cassert>
+ #include <cstdlib>
+ #include <iostream>
+@@ -15,25 +16,21 @@ enum class ProfileLevel : uint8_t { None = 0, Full };
+ class Runtime {
+ public:
+     Runtime();
+-
+-    ~Runtime() {
+-        for (auto p: platforms_) {
+-            delete p;
+-        }
+-    }
++    Runtime(const Runtime &);
++    ~Runtime();
+ 
+     /// Registers the given platform into the runtime.
+     template <typename T, typename... Args>
+     void register_platform(const std::string& name, Args... args) {
+         PlatformFactory<T> factory;
+         Platform* p = factory.create(this, name, args...);
+-        platforms_.push_back(p);
++        platforms_->push_back(p);
+     }
+ 
+     /// Displays available platforms.
+     void display_info() {
+         info("Available platforms:");
+-        for (auto p: platforms_) {
++        for (auto p: *platforms_) {
+             info("    * %: % device(s)", p->name(), p->dev_count());
+         }
+     }
+@@ -41,42 +38,42 @@ public:
+     /// Allocates memory on the given device.
+     void* alloc(PlatformId plat, DeviceId dev, int64_t size) {
+         check_device(plat, dev);
+-        return platforms_[plat]->alloc(dev, size);
++        return (*platforms_)[plat]->alloc(dev, size);
+     }
+ 
+     /// Allocates page-locked memory on the given platform and device.
+     void* alloc_host(PlatformId plat, DeviceId dev, int64_t size) {
+         check_device(plat, dev);
+-        return platforms_[plat]->alloc_host(dev, size);
++        return (*platforms_)[plat]->alloc_host(dev, size);
+     }
+ 
+     /// Allocates unified memory on the given platform and device.
+     void* alloc_unified(PlatformId plat, DeviceId dev, int64_t size) {
+         check_device(plat, dev);
+-        return platforms_[plat]->alloc_unified(dev, size);
++        return (*platforms_)[plat]->alloc_unified(dev, size);
+     }
+ 
+     /// Returns the device memory associated with the page-locked memory.
+     void* get_device_ptr(PlatformId plat, DeviceId dev, void* ptr) {
+         check_device(plat, dev);
+-        return platforms_[plat]->get_device_ptr(dev, ptr);
++        return (*platforms_)[plat]->get_device_ptr(dev, ptr);
+     }
+ 
+     /// Releases memory.
+     void release(PlatformId plat, DeviceId dev, void* ptr) {
+         check_device(plat, dev);
+-        platforms_[plat]->release(dev, ptr);
++        (*platforms_)[plat]->release(dev, ptr);
+     }
+ 
+     /// Releases previously allocated page-locked memory.
+     void release_host(PlatformId plat, DeviceId dev, void* ptr) {
+         check_device(plat, dev);
+-        platforms_[plat]->release_host(dev, ptr);
++        (*platforms_)[plat]->release_host(dev, ptr);
+     }
+ 
+     /// Associate a program string to a given filename.
+     void register_file(const std::string& filename, const std::string& program_string) {
+-        files_[filename] = program_string;
++        (*files_)[filename] = program_string;
+     }
+ 
+     std::string load_file(const std::string& filename) const;
+@@ -92,7 +89,7 @@ public:
+                        void** args, const uint32_t* sizes, const uint32_t* aligns, const uint32_t* allocs, const KernelArgType* types,
+                        uint32_t num_args) {
+         check_device(plat, dev);
+-        platforms_[plat]->launch_kernel(dev,
++        (*platforms_)[plat]->launch_kernel(dev,
+                                         file, kernel,
+                                         grid, block,
+                                         args, sizes, aligns, allocs, types,
+@@ -102,7 +99,7 @@ public:
+     /// Waits for the completion of all kernels on the given platform and device.
+     void synchronize(PlatformId plat, DeviceId dev) {
+         check_device(plat, dev);
+-        platforms_[plat]->synchronize(dev);
++        (*platforms_)[plat]->synchronize(dev);
+     }
+ 
+     /// Copies memory.
+@@ -112,17 +109,17 @@ public:
+         check_device(plat_dst, dev_dst);
+         if (plat_src == plat_dst) {
+             // Copy from same platform
+-            platforms_[plat_src]->copy(dev_src, src, offset_src, dev_dst, dst, offset_dst, size);
++            (*platforms_)[plat_src]->copy(dev_src, src, offset_src, dev_dst, dst, offset_dst, size);
+             debug("Copy between devices % and % on platform %", dev_src, dev_dst, plat_src);
+         } else {
+             // Copy from another platform
+             if (plat_src == 0) {
+                 // Source is the CPU platform
+-                platforms_[plat_dst]->copy_from_host(src, offset_src, dev_dst, dst, offset_dst, size);
++                (*platforms_)[plat_dst]->copy_from_host(src, offset_src, dev_dst, dst, offset_dst, size);
+                 debug("Copy from host to device % on platform %", dev_dst, plat_dst);
+             } else if (plat_dst == 0) {
+                 // Destination is the CPU platform
+-                platforms_[plat_src]->copy_to_host(dev_src, src, offset_src, dst, offset_dst, size);
++                (*platforms_)[plat_src]->copy_to_host(dev_src, src, offset_src, dst, offset_dst, size);
+                 debug("Copy to host from device % on platform %", dev_src, plat_src);
+             } else {
+                 error("Cannot copy memory between different platforms");
+@@ -130,19 +127,23 @@ public:
+         }
+     }
+ 
+-    bool profiling_enabled() { return profile_ == ProfileLevel::Full; }
++    bool profiling_enabled() { return *profile_ == ProfileLevel::Full; }
+ 
+ private:
+     void check_device(PlatformId plat, DeviceId dev) {
+-        assert((size_t)dev < platforms_[plat]->dev_count() && "Invalid device");
++        assert((size_t)dev < (*platforms_)[plat]->dev_count() && "Invalid device");
+         unused(plat, dev);
+     }
+ 
+-    ProfileLevel profile_;
+-    std::vector<Platform*> platforms_;
+-    std::unordered_map<std::string, std::string> files_;
++    static ProfileLevel * profile_;
++    static std::vector<Platform*> * platforms_;
++    static std::unordered_map<std::string, std::string> * files_;
++
++public:
++    static std::atomic_int * life_count;
++    static std::atomic_int * alloc_count;
+ };
+ 
+-Runtime& runtime();
++Runtime runtime();
+ 
+ #endif
