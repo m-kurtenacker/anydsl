@@ -25,10 +25,14 @@
 : ${LLVM_GIT_BRANCH:=master}
 : ${LLVM_SRC_VERSION:=12.0.0}
 
+# set this to false if you don't want to build LLVM with RV support
+: ${RV:=true}
+
 # use this to debug thorin hash table performance
 : ${THORIN_PROFILE:=false}
+
+# set this to false if you don't build with LLVM
 : ${RUNTIME_JIT:=true}
-: ${CLONE_RODENT:=true}
 
 # set the default branches for each repository
 : ${BRANCH_RV:=fixes}
@@ -39,6 +43,7 @@
 : ${BRANCH_STINCILLA:=artic}
 : ${BRANCH_RODENT:=artic}
 
+: ${CLONE_RODENT:=true}
 : ${RODENT_PLATFORM:=generic}
 
 : ${NOUPDATE:=false}
