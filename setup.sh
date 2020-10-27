@@ -143,7 +143,7 @@ fi
 # source this file to put clang and impala in path
 cat > "${CUR}/project.sh" <<_EOF_
 export PATH="${CUR}/llvm_install/bin:${CUR}/impala/build/bin:${CUR}/artic/build/bin:\${PATH:-}"
-export LD_LIBRARY_PATH="${CUR}/llvm_install/lib:\${LD_LIBRARY_PATH:-}"
+export LD_LIBRARY_PATH="${CUR}/runtime/build/lib:${CUR}/llvm_install/lib:\${LD_LIBRARY_PATH:-}"
 _EOF_
 if [ "${CMAKE-}" == true ]; then
     echo "export PATH=\"${CUR}/cmake_install/bin:\${PATH:-}\"" >> ${CUR}/project.sh
@@ -195,7 +195,7 @@ ${NINJA}
 cd "${CUR}"
 clone_or_update AnyDSL stincilla ${BRANCH_STINCILLA}
 cd "${CUR}/stincilla/build"
-cmake .. ${CMAKE_MAKE} -DCMAKE_BUILD_TYPE:STRING=${BUILD_TYPE} -DAnyDSL_runtime_DIR:PATH="${CUR}/runtime/build/share/anydsl/cmake" -DBACKEND:STRING="cpu" -G Ninja
+cmake .. ${CMAKE_MAKE} -DCMAKE_BUILD_TYPE:STRING=${BUILD_TYPE} -DAnyDSL_runtime_DIR:PATH="${CUR}/runtime/build/share/anydsl/cmake" -DBACKEND:STRING="${STINCILLA_PLATFORM}" -G Ninja
 ${NINJA}
 
 # configure rodent but don't build yet

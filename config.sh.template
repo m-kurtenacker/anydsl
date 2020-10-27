@@ -45,5 +45,6 @@
 
 : ${CLONE_RODENT:=true}
 : ${RODENT_PLATFORM:=generic}
+: ${STINCILLA_PLATFORM:=cpu}
 
 : ${NOUPDATE:=false}
