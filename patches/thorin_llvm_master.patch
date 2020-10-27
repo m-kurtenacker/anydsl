@@ -69,12 +69,21 @@ diff --git a/src/thorin/be/llvm/vectorize.cpp b/src/thorin/be/llvm/vectorize.cpp
 index 82827ce8..070c77ae 100644
 --- a/src/thorin/be/llvm/vectorize.cpp
 +++ b/src/thorin/be/llvm/vectorize.cpp
-@@ -190,7 +190,7 @@ void CodeGen::emit_vectorize(u32 vector_length, llvm::Function* kernel_func, llv
- 
+@@ -88,7 +88,7 @@ void CodeGen::emit_sequence(llvm::Function* kernel_func) {
+         user->dump();
+         auto kernel_call = llvm::dyn_cast<llvm::CallInst>(user);
+         if (kernel_call && kernel_call->getCalledFunction() == kernel_func)
+-            llvm::InlineFunction(kernel_call, info);
++            llvm::InlineFunction(*kernel_call, info);
+     }
+
+     // remove vectorized function
+@@ -257,7 +257,7 @@ void CodeGen::emit_vectorize(u32 vector_length, llvm::Function* kernel_func, llv
+
      // inline kernel
      llvm::InlineFunctionInfo info;
 -    llvm::InlineFunction(simd_kernel_call, info);
 +    llvm::InlineFunction(*simd_kernel_call, info);
- 
+
      // remove vectorized function
      if (simd_kernel_func->hasNUses(0))
