@@ -69,4 +69,6 @@ endif()
 add_custom_target(pull COMMENT ">>> pull all AnyDSL packages")
 add_dependencies(pull pull-thorin pull-impala pull-artic pull-runtime)
 
+configure_file(scripts/setup-project.sh.in ${CMAKE_BINARY_DIR}/share/anydsl/setup-project.sh @ONLY)
+
 add_subdirectory(applications)

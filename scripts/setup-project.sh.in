@@ -1,0 +1,26 @@
+echo "Setting up project from folder @CMAKE_SOURCE_DIR@"
+
+export THORIN_PLATFORM_PATH="@CMAKE_SOURCE_DIR@/runtime/platforms"
+
+export PATH="@CMAKE_SOURCE_DIR@/build/bin:${PATH:-}"
+export LD_LIBRARY_PATH="@CMAKE_SOURCE_DIR@/build/lib:${LD_LIBRARY_PATH:-}"
+export LIBRARY_PATH="@CMAKE_SOURCE_DIR@/build/lib:${LIBRARY_PATH:-}"
+export CMAKE_PREFIX_PATH="@CMAKE_SOURCE_DIR@/build/share/anydsl/cmake:${CMAKE_PREFIX_PATH:-}"
+
+if [ "@LLVM_INSTALL_PREFIX@" != "" ] && [ -d @LLVM_INSTALL_PREFIX@ ]; then
+    echo "Detected llvm_install directory, adding llvm to path"
+    export PATH="@LLVM_INSTALL_PREFIX@/bin:${PATH:-}"
+    export LD_LIBRARY_PATH="@LLVM_INSTALL_PREFIX@/lib:${LD_LIBRARY_PATH:-}"
+    export LIBRARY_PATH="@LLVM_INSTALL_PREFIX@/lib:${LIBRARY_PATH:-}"
+    export CMAKE_PREFIX_PATH="@LLVM_INSTALL_PREFIX@/lib/cmake/llvm:${CMAKE_PREFIX_PATH:-}"
+fi
+
+if [ "${ZSH_VERSION:-}" != "" ]; then
+    echo "Detected zsh, setting up completion scripts"
+    export fpath=(@CMAKE_SOURCE_DIR@/zsh ${fpath:-})
+    compinit
+fi
+
+echo "Setting up rebuild alias"
+alias anydsl-rebuild="cmake --build @CMAKE_SOURCE_DIR@/build"
+alias anydsl-config="ccmake @CMAKE_SOURCE_DIR@/build"
