@@ -10,6 +10,7 @@ message(STATUS "AnyDSL default branch: ${AnyDSL_DEFAULT_BRANCH}")
 set(AnyDSL_PKG_Half_AUTOBUILD OFF CACHE BOOL "forces the availability of Half to build AnyDSL packages")
 set(AnyDSL_PKG_LLVM_AUTOBUILD OFF CACHE BOOL "forces the availability of LLVM to build AnyDSL packages")
 set(AnyDSL_PKG_RV_AUTOBUILD   OFF CACHE BOOL "forces the availability of RV to build AnyDSL packages")
+set(AnyDSL_PKG_JSON_AUTOBUILD OFF CACHE BOOL "forces the availability of nlohmann::json to build AnyDSL packages")
 
 # Half
 include(cmake/half-package.cmake)
@@ -18,6 +19,9 @@ if(Half_DIR)
 else()
     message(STATUS "Half not found.")
 endif()
+
+# json
+include(cmake/json-package.cmake)
 
 # LLVM and clang
 include(cmake/llvm-package.cmake)
@@ -56,6 +60,11 @@ fetch_anydsl_package(AnyDSL_artic_DIR artic artic ${AnyDSL_REMOTE_URL}/artic)
 message(STATUS "AnyDSL_artic_DIR: ${AnyDSL_artic_DIR}")
 set(Artic_DIR ${AnyDSL_artic_DIR})
 
+# AnyDSL_anyopt
+fetch_anydsl_package(AnyDSL_anyopt_DIR anyopt anyopt ${AnyDSL_REMOTE_URL}/anyopt)
+message(STATUS "AnyDSL_anyopt_DIR: ${AnyDSL_anyopt_DIR}")
+set(Anyopt_DIR ${AnyDSL_anyopt_DIR})
+
 # AnyDSL_runtime
 fetch_anydsl_package(AnyDSL_runtime_DIR runtime AnyDSL_runtime ${AnyDSL_REMOTE_URL}/runtime)
 message(STATUS "AnyDSL_runtime_DIR: ${AnyDSL_runtime_DIR}")
@@ -67,7 +76,7 @@ endif()
 
 
 add_custom_target(pull COMMENT ">>> pull all AnyDSL packages")
-add_dependencies(pull pull-thorin pull-impala pull-artic pull-runtime)
+add_dependencies(pull pull-thorin pull-anyopt pull-impala pull-artic pull-runtime)
 
 configure_file(scripts/setup-project.sh.in ${CMAKE_BINARY_DIR}/share/anydsl/setup-project.sh @ONLY)
 

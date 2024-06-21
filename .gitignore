@@ -1,5 +1,6 @@
 anydsl.github.io/
 artic/
+anyopt/
 config.sh
 half/
 impala/
@@ -15,6 +16,7 @@ thorin/
 build*
 contrib/
 pal/
+applications/*/
 rocm-device-libs/
 CTestConfig.cmake
 clang+llvm-*.tar.xz
