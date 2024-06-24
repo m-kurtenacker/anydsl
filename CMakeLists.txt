@@ -50,11 +50,6 @@ if(TARGET intrinsics_gen)
 endif()
 
 
-# AnyDSL_impala
-fetch_anydsl_package(AnyDSL_impala_DIR impala impala ${AnyDSL_REMOTE_URL}/impala)
-message(STATUS "AnyDSL_impala_DIR: ${AnyDSL_impala_DIR}")
-set(Impala_DIR ${AnyDSL_impala_DIR})
-
 # AnyDSL_artic
 fetch_anydsl_package(AnyDSL_artic_DIR artic artic ${AnyDSL_REMOTE_URL}/artic)
 message(STATUS "AnyDSL_artic_DIR: ${AnyDSL_artic_DIR}")
@@ -76,7 +71,7 @@ endif()
 
 
 add_custom_target(pull COMMENT ">>> pull all AnyDSL packages")
-add_dependencies(pull pull-thorin pull-anyopt pull-impala pull-artic pull-runtime)
+add_dependencies(pull pull-thorin pull-anyopt pull-artic pull-runtime)
 
 configure_file(scripts/setup-project.sh.in ${CMAKE_BINARY_DIR}/share/anydsl/setup-project.sh @ONLY)
 
